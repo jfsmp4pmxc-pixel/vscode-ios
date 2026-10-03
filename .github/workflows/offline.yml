@@ -1,5 +1,7 @@
 name: Build VS Code Web Native iOS IPAname: Build VS Code Web Native iOS IPA
 
+on:name: Build VS Code Web Native iOS IPA
+
 on:
   push:
     branches: [ main, master ]
@@ -18,17 +20,40 @@ jobs:
         with:
           node-version: 20
 
-      - name: Download & Extract Official VS Code Web Standalone
+      - name: Download & Prepare VS Code Web Bundle
         run: |
           mkdir web-app
           cd web-app
           
-          # Tải bản release web tĩnh chính thức từ CDN của Microsoft
+          # Tải bản release web-standalone chính thức từ Microsoft
           curl -L "https://update.code.visualstudio.com/latest/web-standalone/stable" -o vscode-web.tar.gz
-          
-          # Giải nén bộ tài nguyên web
           tar -xzf vscode-web.tar.gz --strip-components=1
           rm vscode-web.tar.gz
+
+          # Tạo file index.html để nạp đúng Workbench của VS Code
+          cat << 'EOF' > index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+            <title>VS Code</title>
+            <link rel="stylesheet" href="./out/vs/workbench/workbench.web.main.css" />
+          </head>
+          <body class="webworker-container">
+            <script src="./out/vs/loader.js"></script>
+            <script src="./out/vs/webPackagePaths.js"></script>
+            <script>
+              require.config({
+                baseUrl: './out'
+              });
+              require(['vs/workbench/workbench.web.main'], function() {
+                // Khởi tạo VS Code Workbench
+              });
+            </script>
+          </body>
+          </html>
+          EOF
 
       - name: Setup Capacitor CLI & Core
         run: |
@@ -38,6 +63,22 @@ jobs:
       - name: Add iOS Platform
         run: |
           npx cap add ios
+
+      - name: Configure Capacitor Server (Fix Black Screen / CORS)
+        run: |
+          # Thêm cấu hình Server Local Host để WKWebView không bị dính lỗi CORS file://
+          cat << 'EOF' > ios/App/App/capacitor.config.json
+          {
+            "appId": "com.vscode.app",
+            "appName": "VSCode",
+            "webDir": "public",
+            "bundledWebRuntime": false,
+            "server": {
+              "iosScheme": "https",
+              "hostname": "localhost"
+            }
+          }
+          EOF
 
       - name: Fix Podfile Target & Install Pods
         run: |

@@ -1,0 +1,90 @@
+name: Build VS Code Web Native iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download & Prepare VS Code Web Local Bundle
+        run: |
+          mkdir web-app
+          cd web-app
+          
+          # Khởi tạo package và tải bộ web tĩnh chính thức của VS Code
+          npm init -y
+          npm install @vscode/vscode-web
+          
+          # Copy toàn bộ tài nguyên web tĩnh ra thư mục gốc
+          cp -r node_modules/@vscode/vscode-web/out/* .
+          
+          # Tạo file index.html chuẩn để khởi chạy VS Code Workbench Offline
+          cat << 'EOF' > index.html
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+            <title>VS Code Mobile</title>
+            <link rel="stylesheet" href="workbench.css" />
+          </head>
+          <body class="webworker-container">
+            <script src="main.js"></script>
+          </body>
+          </html>
+          EOF
+
+      - name: Setup Capacitor CLI & Core
+        run: |
+          npm install @capacitor/core@5 @capacitor/cli@5 @capacitor/ios@5
+          npx cap init VSCode com.vscode.app --web-dir web-app
+
+      - name: Add iOS Platform
+        run: |
+          npx cap add ios
+
+      - name: Fix Podfile Target & Install Pods
+        run: |
+          sed -i '' "s/platform :ios, '.*'/platform :ios, '13.0'/" ios/App/Podfile
+          cd ios/App
+          pod install
+
+      - name: Sync Capacitor Asset
+        run: |
+          npx cap copy ios
+
+      - name: Build Unsigned iOS App
+        run: |
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace \
+                     -scheme App \
+                     -sdk iphoneos \
+                     -configuration Release \
+                     -derivedDataPath build \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -r ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -r VSCode-Unsigned.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VSCode-Unsigned-IPA
+          path: VSCode-Unsigned.ipa

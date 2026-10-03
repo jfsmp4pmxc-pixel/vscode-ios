@@ -1,4 +1,4 @@
-name: Build VS Code Web Native iOS IPA
+name: Build VS Code Web Native iOS IPAname: Build VS Code Web Native iOS IPA
 
 on:
   push:
@@ -18,33 +18,17 @@ jobs:
         with:
           node-version: 20
 
-      - name: Download & Prepare VS Code Web Local Bundle
+      - name: Download & Extract Official VS Code Web Standalone
         run: |
           mkdir web-app
           cd web-app
           
-          # Khởi tạo package và tải bộ web tĩnh chính thức của VS Code
-          npm init -y
-          npm install @vscode/vscode-web
+          # Tải bản release web tĩnh chính thức từ CDN của Microsoft
+          curl -L "https://update.code.visualstudio.com/latest/web-standalone/stable" -o vscode-web.tar.gz
           
-          # Copy toàn bộ tài nguyên web tĩnh ra thư mục gốc
-          cp -r node_modules/@vscode/vscode-web/out/* .
-          
-          # Tạo file index.html chuẩn để khởi chạy VS Code Workbench Offline
-          cat << 'EOF' > index.html
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8" />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-            <title>VS Code Mobile</title>
-            <link rel="stylesheet" href="workbench.css" />
-          </head>
-          <body class="webworker-container">
-            <script src="main.js"></script>
-          </body>
-          </html>
-          EOF
+          # Giải nén bộ tài nguyên web
+          tar -xzf vscode-web.tar.gz --strip-components=1
+          rm vscode-web.tar.gz
 
       - name: Setup Capacitor CLI & Core
         run: |
